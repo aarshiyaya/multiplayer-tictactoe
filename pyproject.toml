@@ -7,9 +7,19 @@ requires-python = ">=3.13"
 dependencies = [
     "face-recognition>=1.3.0",
     "face-recognition-models",
+    "fastapi>=0.135.3",
+    "itsdangerous>=2.2.0",
+    "jinja2>=3.1.6",
+    "mysql-connector-python>=9.6.0",
     "numpy>=2.4.3",
     "pillow>=12.1.1",
+    "pymongo>=4.16.0",
+    "python-jose[cryptography]>=3.5.0",
+    "python-multipart>=0.0.24",
+    "requests>=2.33.1",
     "setuptools<71.0",
+    "uvicorn>=0.44.0",
+    "websockets>=16.0",
 ]
 
 [tool.uv.sources]

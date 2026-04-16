@@ -35,63 +35,58 @@ def get_face_encoding(image_data):
         image_bytes = _to_bytes(image_data)
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         image_np = np.array(image)
-
-        face_locations = face_recognition.face_locations(image_np)
-        if not face_locations:
+        locs = face_recognition.face_locations(image_np)
+        if not locs:
             return None
-
-        encodings = face_recognition.face_encodings(image_np, face_locations)
-        if not encodings:
-            return None
-
-        return encodings[0]
-
+        encs = face_recognition.face_encodings(image_np, locs)
+        return encs[0] if encs else None
     except Exception as e:
         print(f"Error encoding image: {e}")
         return None
 
-
-def find_closest_match(login_image_data, db_images_dict):
+def build_encodings_cache(db_images_dict):
     """
-    Compares a login attempt against a dictionary of known profile images.
+    Call once at server startup.
+    :param db_images_dict:
+        { uid: image_data } fetched from MongoDB.
+    :return:
+        { uid: encoding } with entries skipped if no face is detected.
+    """
+    cache = {}
+    for uid, img_data in db_images_dict.items():
+        enc = get_face_encoding(img_data)
+        if enc is not None:
+            cache[uid] = enc
+    print(f"Encodings cache built: {len(cache)}/{len(db_images_dict)} records encoded.")
+    return cache
 
+def find_closest_match(login_image_data, encodings_cache):
+    """
+    Compares a login attempt against precomputed encodings.
     :param login_image_data:
         The webcam capture as raw bytes or a Base64 string.
-    :param db_images_dict:
-        A dictionary mapping { uid: image_data } fetched from MongoDB,
-        where each value may be raw bytes or a Base64 string.
+    :param encodings_cache:
+        { uid: encoding } as returned by build_encodings_cache().
     :return:
         The UID of the closest matching face, or None if no face is
         detected in the login frame or no match clears the threshold.
     """
     print("Processing login frame...")
-    login_encoding = get_face_encoding(login_image_data)
-
-    if login_encoding is None:
+    login_enc = get_face_encoding(login_image_data)
+    if login_enc is None:
         print("No face detected in login frame.")
         return None
-
-    best_match_uid = None
-    best_distance = float("inf")
-
-    print(f"Comparing against {len(db_images_dict)} records in database...")
-    for uid, db_img_data in db_images_dict.items():
-        db_encoding = get_face_encoding(db_img_data)
-        if db_encoding is None:
-            continue
-
-        distance = face_recognition.face_distance([db_encoding], login_encoding)[0]
-        if distance < best_distance:
-            best_distance = distance
-            best_match_uid = uid
-
-    threshold = 0.5
-    if best_distance <= threshold:
-        print(f"Match found: UID={best_match_uid}  distance={best_distance:.3f}")
-        return best_match_uid
-
-    print(
-        f"No match found. Closest distance was {best_distance:.3f} "
-        f"(threshold is <= {threshold})"
-    )
+    best_uid = None
+    best_dist = float("inf")
+    print(f"Comparing against {len(encodings_cache)} records in cache...")
+    for uid, enc in encodings_cache.items():
+        d = face_recognition.face_distance([enc], login_enc)[0]
+        if d < best_dist:
+            best_dist = d
+            best_uid = uid
+    threshold = 0.7
+    if best_dist <= threshold:
+        print(f"Match found: UID={best_uid}  distance={best_dist:.3f}")
+        return best_uid
+    print(f"No match found. Closest distance was {best_dist:.3f} (threshold is <= {threshold})")
     return None

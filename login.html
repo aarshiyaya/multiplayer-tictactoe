@@ -2,183 +2,196 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>ByteMe Arena — Login</title>
+  <link rel="stylesheet" href="/static/style.css">
   <style>
-    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
     body {
-      font-family: 'Segoe UI', system-ui, sans-serif;
-      background: #0f1117;
-      color: #e2e8f0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      min-height: 100vh;
-      gap: 1.5rem;
+        justify-content: center;
+        overflow: hidden;
+        gap: 2rem;
+    }
+
+    #glitter-canvas {
+        position: fixed;
+        inset: 0;
+        z-index: 0;
+        pointer-events: none;
+    }
+
+    .glow-orb {
+        position: fixed;
+        border-radius: 50%;
+        filter: blur(80px);
+        opacity: 0.15;
+        z-index: 0;
+        animation: float-orb 12s ease-in-out infinite alternate;
+    }
+
+    .orb-pink { width: 300px; height: 300px; background-color: #ff1493; top: -80px; left: -60px; }
+    .orb-orchid { width: 250px; height: 250px; background-color: #da70d6; bottom: -60px; right: -40px; animation-delay: -4s; }
+    .orb-magenta { width: 200px; height: 200px; background-color: #ff69b4; top: 40%; left: 60%; animation-delay: -8s; }
+
+    @keyframes float-orb {
+        0% { transform: translate(0, 0) scale(1); }
+        100% { transform: translate(30px, -20px) scale(1.1); }
     }
 
     h1 {
-      font-size: 2rem;
-      font-weight: 700;
-      letter-spacing: 0.05em;
-      color: #a78bfa;
+        font-size: 3rem;
+        z-index: 10;
+        color: #ff69b4;
     }
 
-    p.subtitle {
-      color: #94a3b8;
-      font-size: 0.95rem;
+    p {
+        color: #c8a0b8;
+        font-size: 1.1rem;
+        z-index: 10;
     }
 
-    .cam-wrapper {
-      position: relative;
-      border-radius: 12px;
-      overflow: hidden;
-      border: 2px solid #a78bfa44;
-      box-shadow: 0 0 30px #a78bfa22;
+    .camera-container {
+        position: relative;
+        border-radius: 14px;
+        overflow: hidden;
+        border: 2px solid #ff69b444;
+        box-shadow: 0 0 40px #ff69b422;
+        z-index: 10;
     }
 
-    video#cam {
-      display: block;
-      width: 360px;
-      height: 270px;
-      background: #1e2130;
-      transform: scaleX(-1);
+    video {
+        display: block;
+        width: 360px;
+        height: 270px;
+        background-color: #1a0a12;
+        transform: scaleX(-1);
     }
-
-    canvas#snap { display: none; }
-
-    button#loginBtn {
-      padding: 0.75rem 2.5rem;
-      background: #7c3aed;
-      color: #fff;
-      border: none;
-      border-radius: 8px;
-      font-size: 1rem;
-      font-weight: 600;
-      cursor: pointer;
-      transition: background 0.2s, transform 0.1s;
-    }
-
-    button#loginBtn:hover { background: #6d28d9; }
-    button#loginBtn:active { transform: scale(0.97); }
-    button#loginBtn:disabled { background: #4b5280; cursor: not-allowed; }
-
-    #msg {
-      min-height: 1.5rem;
-      font-size: 0.9rem;
-      text-align: center;
-      padding: 0.5rem 1rem;
-      border-radius: 6px;
-      transition: opacity 0.3s;
-    }
-
-    #msg.error {
-      background: #3b1c1c;
-      color: #fca5a5;
-      border: 1px solid #f87171;
-    }
-
-    #msg.info {
-      background: #1c2e3b;
-      color: #93c5fd;
-      border: 1px solid #60a5fa;
-    }
-
-    .cam-error {
-      width: 360px;
-      height: 270px;
-      background: #1e2130;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      color: #f87171;
-      font-size: 0.85rem;
-      text-align: center;
-      padding: 1rem;
-    }
-
-    a.board-link {
-      color: #a78bfa;
-      font-size: 0.85rem;
-      text-decoration: none;
-    }
-    a.board-link:hover { text-decoration: underline; }
-  </style>
+</style>
 </head>
 <body>
-  <h1>ByteMe Arena</h1>
-  <p class="subtitle">Look at the camera and press Login</p>
+    <div class="glow-orb orb-pink"></div>
+    <div class="glow-orb orb-orchid"></div>
+    <div class="glow-orb orb-magenta"></div>
+    <canvas id="glitter-canvas"></canvas>
 
-  <div class="cam-wrapper" id="camWrapper">
-    <video id="cam" autoplay playsinline muted></video>
-  </div>
-  <canvas id="snap" width="360" height="270"></canvas>
+    <h1>ByteMe Arena</h1>
+    <p>Look at the camera and press Login</p>
+    
+    <div class="camera-container">
+        <video id="camera-video" autoplay playsinline muted></video>
+    </div>
+    
+    <canvas id="snapshot-canvas" width="360" height="270" style="display: none;"></canvas>
+    
+    <button id="login-button" disabled>Login</button>
+    <div id="login-message" class="message"></div>
+    
+    <a href="/leaderboard-page" style="z-index: 10;">View Leaderboard</a>
 
-  <button id="loginBtn" disabled>Login</button>
-  <div id="msg"></div>
-  <a class="board-link" href="/leaderboard-page">View Leaderboard</a>
-
-  <script>
-    const video = document.getElementById('cam');
-    const canvas = document.getElementById('snap');
-    const loginBtn = document.getElementById('loginBtn');
-    const msg = document.getElementById('msg');
-    const wrapper = document.getElementById('camWrapper');
-
-    function showMsg(text, type) {
-      msg.textContent = text;
-      msg.className = type;
-    }
-
-    async function startCam() {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
-        video.srcObject = stream;
-        video.onloadedmetadata = () => loginBtn.disabled = false;
-      } catch (err) {
-        wrapper.innerHTML = `<div class="cam-error">Camera access denied.<br>${err.message}</div>`;
-        showMsg('Camera unavailable — cannot log in.', 'error');
-      }
-    }
-
-    loginBtn.addEventListener('click', async () => {
-      loginBtn.disabled = true;
-      showMsg('Capturing frame…', 'info');
-
-      const ctx = canvas.getContext('2d');
-      // Mirror flip for natural selfie
-      ctx.save();
-      ctx.scale(-1, 1);
-      ctx.drawImage(video, -canvas.width, 0, canvas.width, canvas.height);
-      ctx.restore();
-
-      const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
-      const base64 = dataUrl.replace('data:image/jpeg;base64,', '');
-
-      showMsg('Authenticating…', 'info');
-      try {
-        const res = await fetch('/login', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ image: base64 })
-        });
-        const data = await res.json();
-        if (data.success) {
-          showMsg('Match found! Redirecting…', 'info');
-          window.location.href = '/lobby';
-        } else {
-          showMsg(data.error || 'Authentication failed.', 'error');
-          loginBtn.disabled = false;
+    <script>
+        const canvas = document.getElementById('glitter-canvas');
+        const context = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
         }
-      } catch (err) {
-        showMsg('Network error: ' + err.message, 'error');
-        loginBtn.disabled = false;
-      }
-    });
+        
+        resizeCanvas();
+        window.addEventListener('resize', resizeCanvas);
 
-    startCam();
-  </script>
+        const particles = Array.from({ length: 70 }, () => ({
+            x: Math.random() * canvas.width,
+            y: Math.random() * canvas.height,
+            radius: Math.random() * 2.5 + 0.5,
+            speedX: (Math.random() - 0.5) * 0.3,
+            speedY: (Math.random() - 0.5) * 0.3,
+            opacity: Math.random(),
+            fadeSpeed: Math.random() * 0.015 + 0.005,
+            hue: Math.random() > 0.5 ? 330 : 300
+        }));
+
+        function animateGlitter() {
+            context.clearRect(0, 0, canvas.width, canvas.height);
+            
+            particles.forEach(particle => {
+                particle.x = (particle.x + particle.speedX + canvas.width) % canvas.width;
+                particle.y = (particle.y + particle.speedY + canvas.height) % canvas.height;
+                particle.opacity += particle.fadeSpeed;
+                
+                if (particle.opacity > 1 || particle.opacity < 0) {
+                    particle.fadeSpeed *= -1;
+                }
+                
+                context.beginPath();
+                context.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                context.fillStyle = `hsla(${particle.hue}, 100%, 75%, ${Math.max(0, particle.opacity)})`;
+                context.fill();
+                
+                if (particle.radius > 1.5 && particle.opacity > 0.5) {
+                    context.strokeStyle = `hsla(${particle.hue}, 100%, 85%, ${particle.opacity * 0.4})`;
+                    context.lineWidth = 0.5;
+                    context.beginPath();
+                    context.moveTo(particle.x - particle.radius * 2, particle.y);
+                    context.lineTo(particle.x + particle.radius * 2, particle.y);
+                    context.moveTo(particle.x, particle.y - particle.radius * 2);
+                    context.lineTo(particle.x, particle.y + particle.radius * 2);
+                    context.stroke();
+                }
+            });
+            
+            requestAnimationFrame(animateGlitter);
+        }
+        
+        animateGlitter();
+
+        const videoElement = document.getElementById('camera-video');
+        const snapshotCanvas = document.getElementById('snapshot-canvas');
+        const loginButton = document.getElementById('login-button');
+        const messageDisplay = document.getElementById('login-message');
+
+        navigator.mediaDevices.getUserMedia({ video: true })
+            .then(stream => {
+                videoElement.srcObject = stream;
+                videoElement.onloadedmetadata = () => {
+                    loginButton.disabled = false;
+                    messageDisplay.textContent = 'Camera ready';
+                };
+            })
+            .catch(() => {
+                messageDisplay.textContent = 'Camera failed';
+            });
+
+        loginButton.addEventListener('click', async () => {
+            messageDisplay.textContent = 'Verifying...';
+            loginButton.disabled = true;
+
+            const context = snapshotCanvas.getContext('2d');
+            context.drawImage(videoElement, 0, 0, 360, 270);
+            const imageBase64 = snapshotCanvas.toDataURL('image/jpeg').split(',')[1];
+            
+            try {
+                const response = await fetch('/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    credentials: 'include',
+                    body: JSON.stringify({ image: imageBase64 })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    messageDisplay.textContent = `Welcome ${data.name}`;
+                    setTimeout(() => {
+                        window.location.href = '/lobby';
+                    }, 800);
+                } else {
+                    messageDisplay.textContent = data.error;
+                    loginButton.disabled = false;
+                }
+            } catch (error) {
+                messageDisplay.textContent = 'Network error occurred';
+                loginButton.disabled = false;
+            }
+        });
+    </script>
 </body>
 </html>

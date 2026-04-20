@@ -1,0 +1,174 @@
+/* Shared Reset and Fonts */
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700&display=swap');
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: 'Outfit', sans-serif;
+    background-color: #0a0a0a;
+    color: #e8d0dc;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+/* Shared Header */
+header {
+    width: 100%;
+    background-color: #111111;
+    padding: 1rem 2rem;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    border-bottom: 1px solid #222222;
+    z-index: 10;
+    /* Keep above effects */
+}
+
+header h1 {
+    font-size: 1.4rem;
+    color: #ff69b4;
+}
+
+nav a,
+header a {
+    color: #ff69b4;
+    text-decoration: none;
+    font-size: 0.9rem;
+    margin-left: 1.5rem;
+}
+
+nav a:hover,
+header a:hover {
+    text-decoration: underline;
+}
+
+/* Shared Main Container */
+main {
+    padding: 2rem 1rem;
+    width: 100%;
+    max-width: 800px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1.5rem;
+    z-index: 10;
+}
+
+/* Shared Buttons */
+button {
+    padding: 0.6rem 1.5rem;
+    background-color: #ff1493;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Outfit', sans-serif;
+    font-size: 0.95rem;
+    font-weight: 600;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: #ff69b4;
+}
+
+button:disabled {
+    background-color: #333333;
+    color: #888888;
+    cursor: not-allowed;
+}
+
+button.secondary {
+    background-color: transparent;
+    border: 1px solid #333333;
+    color: #888888;
+    padding: 0.4rem 1rem;
+}
+
+button.secondary:hover {
+    border-color: #ff69b4;
+    color: #ff69b4;
+}
+
+/* Messages */
+.message {
+    color: #ff69b4;
+    font-size: 1rem;
+    font-weight: 600;
+    min-height: 1.5rem;
+    text-align: center;
+}
+
+.error-message {
+    color: #ff6b8a;
+    font-size: 0.9rem;
+    text-align: center;
+    min-height: 1.2rem;
+}
+
+/* Tables (Leaderboard) */
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    text-align: left;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #888888;
+    border-bottom: 1px solid #222222;
+}
+
+td {
+    padding: 0.85rem 1rem;
+    font-size: 1rem;
+    border-bottom: 1px solid #151515;
+}
+
+tr:hover {
+    background-color: #111111;
+}
+
+/* Lobby User Grid */
+.user-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 1.5rem;
+    width: 100%;
+}
+
+.user-card {
+    background-color: #111111;
+    border: 1px solid #222222;
+    border-radius: 10px;
+    padding: 1.5rem 1rem;
+    cursor: pointer;
+    text-align: center;
+    transition: border-color 0.2s;
+}
+
+.user-card:hover {
+    border-color: #ff69b4;
+}
+
+.user-card span.initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 50px;
+    height: 50px;
+    background-color: #ff1493;
+    border-radius: 50%;
+    margin: 0 auto 0.8rem;
+    color: white;
+    font-size: 1.5rem;
+    font-weight: bold;
+}

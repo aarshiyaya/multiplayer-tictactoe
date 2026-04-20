@@ -4,14 +4,14 @@ from pymongo import MongoClient
 def get_mysql():
     return mysql.connector.connect(
         host="localhost",
-        port=3307,
+        port=3308,
         user="root",
         password="rootpassword",
-        database="byteme_test"
+        database="byteme"
     )
 
 def get_mongo():
     client = MongoClient(
-        "mongodb://admin:password123@localhost:27018/?authSource=admin"
+        "mongodb://admin:password123@localhost:27019/?authSource=admin"
     )
     return client["arena"]["images"]

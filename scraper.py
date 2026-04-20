@@ -3,12 +3,12 @@ import requests
 import base64
 from db import get_mysql, get_mongo
 
+
 def run():
     mysql = get_mysql()
     cursor = mysql.cursor()
-    mongo = get_mongo()
+    mongo_col = get_mongo()
 
-    # reuse HTTP connection (faster)
     session = requests.Session()
 
     cursor.execute("""
@@ -21,10 +21,10 @@ def run():
     """)
     mysql.commit()
 
-    with open("batch_data.csv", newline="") as f:
+    with open("utils/batch_data.csv", newline="") as f:
         reader = csv.DictReader(f)
 
-        count = 0  # for batching commits
+        count = 0
 
         for row in reader:
             uid = row["uid"].strip()
@@ -34,32 +34,32 @@ def run():
             if not url.startswith("http"):
                 url = "https://" + url
 
-            image_url = f"{url}/images/pfp.jpg"
+            image_url = f"{url.rstrip('/')}/images/pfp.jpg"
 
             try:
                 resp = session.get(image_url, timeout=5)
                 if resp.status_code != 200:
-                    print(f"[SKIP] {uid}: HTTP {resp.status_code}")
+                    print(f"[SKIP] {uid}: HTTP fail")
                     continue
 
                 image_b64 = base64.b64encode(resp.content).decode("utf-8")
 
+                # MySQL
                 cursor.execute(
                     "INSERT INTO users (uid, name) VALUES (%s, %s) ON DUPLICATE KEY UPDATE name=%s",
                     (uid, name, name)
                 )
 
-                mongo.update_one(
+                # Mongo (store IMAGE, not encoding)
+                mongo_col.update_one(
                     {"uid": uid},
                     {"$set": {"uid": uid, "image": image_b64}},
                     upsert=True
                 )
 
                 print(f"[OK] {uid}")
-
                 count += 1
 
-                # commit every 10 inserts instead of every time
                 if count % 10 == 0:
                     mysql.commit()
 
@@ -67,11 +67,12 @@ def run():
                 print(f"[ERROR] {uid}: {e}")
                 continue
 
-        mysql.commit()  # final commit
+        mysql.commit()
 
     cursor.close()
     mysql.close()
     print("Done.")
+
 
 if __name__ == "__main__":
     run()

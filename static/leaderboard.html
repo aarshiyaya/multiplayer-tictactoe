@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>ByteMe Arena — Leaderboard</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Leaderboard Specific Styles */
+        .page-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            width: 100%;
+        }
+        
+        .page-header h2 {
+            font-size: 1.1rem;
+            color: #888888;
+        }
+
+        .rank {
+            font-weight: 700;
+            color: #ff69b4;
+            font-size: 1.1rem;
+        }
+
+        .rank.gold { color: #ffd700; }
+        .rank.silver { color: #c0c0c0; }
+        .rank.bronze { color: #cd7f32; }
+
+        .player-id {
+            font-size: 0.8rem;
+            color: #444444;
+            word-break: break-all;
+        }
+
+        .elo-score {
+            font-weight: 700;
+            color: #ff69b4;
+        }
+
+        .loading-text {
+            text-align: center;
+            color: #555555;
+            padding: 3rem;
+            font-size: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ByteMe Arena</h1>
+        <nav>
+            <a href="/">Login</a>
+            <a href="/lobby">Lobby</a>
+        </nav>
+    </header>
+
+    <main>
+        <div class="page-header">
+            <h2>Global Leaderboard</h2>
+            <button id="refresh-button">Refresh</button>
+        </div>
+        
+        <div id="loading-indicator" class="loading-text">Fetching latest scores...</div>
+        
+        <table id="leaderboard-table" style="display: none;">
+            <thead>
+                <tr>
+                    <th>Rank</th>
+                    <th>Name</th>
+                    <th>UID</th>
+                    <th>Elo Rating</th>
+                </tr>
+            </thead>
+            <tbody id="leaderboard-body"></tbody>
+        </table>
+    </main>
+
+    <script>
+        const leaderboardTable = document.getElementById('leaderboard-table');
+        const leaderboardBody = document.getElementById('leaderboard-body');
+        const loadingIndicator = document.getElementById('loading-indicator');
+        const refreshButton = document.getElementById('refresh-button');
+
+        async function fetchAndRenderLeaderboard() {
+            // UI State change
+            refreshButton.disabled = true;
+            loadingIndicator.textContent = 'Fetching latest scores...';
+            loadingIndicator.style.display = 'block';
+            leaderboardTable.style.display = 'none';
+
+            try {
+                const response = await fetch('/lobby/leaderboard', { credentials: 'include' });
+                
+                if (!response.ok) {
+                    throw new Error('Server returned an error');
+                }
+                
+                const playersData = await response.json();
+                
+                leaderboardBody.innerHTML = '';
+                
+                playersData.forEach((player, index) => {
+                    // Determine styling class based on top 3 rank positions
+                    let rankClass = 'rank';
+                    if (index === 0) rankClass += ' gold';
+                    else if (index === 1) rankClass += ' silver';
+                    else if (index === 2) rankClass += ' bronze';
+                    
+                    const tableRow = document.createElement('tr');
+                    
+                    tableRow.innerHTML = `
+                        <td class="${rankClass}">${index + 1}</td>
+                        <td>${player.name || '-'}</td>
+                        <td class="player-id">${player.uid}</td>
+                        <td class="elo-score">${player.elo_rating}</td>
+                    `;
+                    
+                    leaderboardBody.appendChild(tableRow);
+                });
+                
+                // Finalize UI State
+                loadingIndicator.style.display = 'none';
+                leaderboardTable.style.display = 'table';
+                
+            } catch (error) {
+                loadingIndicator.textContent = 'Failed to load leaderboard data.';
+            } finally {
+                refreshButton.disabled = false;
+            }
+        }
+
+        refreshButton.addEventListener('click', fetchAndRenderLeaderboard);
+        
+        // Initial Fetch
+        fetchAndRenderLeaderboard();
+    </script>
+</body>
+</html>

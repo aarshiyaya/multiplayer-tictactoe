@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>ByteMe Arena — Game</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Game Specific Styles */
+        .room-id-label {
+            color: #555555;
+            font-size: 0.9rem;
+        }
+
+        .game-status {
+            font-size: 1.2rem;
+            font-weight: 600;
+            min-height: 1.5rem;
+            text-align: center;
+            color: #888888;
+        }
+
+        .game-status.my-turn {
+            color: #ff69b4;
+        }
+
+        .player-info-container {
+            display: flex;
+            gap: 4rem;
+            text-align: center;
+        }
+
+        .player-tag {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.3rem;
+            padding: 0.8rem 1.5rem;
+            border-radius: 8px;
+            border: 2px solid transparent;
+        }
+
+        .player-tag.active-turn {
+            border-color: #ff69b433;
+        }
+
+        .player-tag .marker {
+            font-size: 1.8rem;
+            font-weight: 800;
+        }
+
+        .player-tag .marker.X { color: #ff1493; }
+        .player-tag .marker.O { color: #da70d6; }
+
+        .player-tag .label {
+            font-size: 0.9rem;
+            color: #666666;
+        }
+
+        .player-tag.active-turn .label {
+            color: #ff69b4;
+        }
+
+        /* Fixed Tic-Tac-Toe Board Grid */
+        .tictactoe-board {
+            display: grid;
+            grid-template-columns: repeat(3, 100px);
+            grid-template-rows: repeat(3, 100px);
+            gap: 8px;
+        }
+
+        .tictactoe-cell {
+            width: 100px;
+            height: 100px;
+            background-color: #111111;
+            border: 1px solid #222222;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 2.8rem;
+            font-weight: 800;
+            line-height: 1;
+            cursor: pointer;
+            user-select: none;
+            transition: border-color 0.2s;
+        }
+
+        .tictactoe-cell:hover:not(.taken):not(.disabled) {
+            border-color: #ff69b466;
+        }
+
+        .tictactoe-cell.taken {
+            cursor: default;
+        }
+
+        .tictactoe-cell.disabled {
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+
+        .tictactoe-cell .X { color: #ff1493; }
+        .tictactoe-cell .O { color: #da70d6; }
+
+        /* Game Result Banner */
+        .result-banner {
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            gap: 1rem;
+            background-color: #111111;
+            border: 1px solid #222222;
+            border-radius: 12px;
+            padding: 2rem 3rem;
+            text-align: center;
+        }
+
+        .result-banner h2 {
+            font-size: 1.6rem;
+            color: #ff69b4;
+        }
+
+        .result-banner p {
+            color: #888888;
+            font-size: 1rem;
+            margin-bottom: 0.5rem;
+        }
+
+        .result-banner a {
+            color: #ff69b4;
+            text-decoration: none;
+            font-weight: 600;
+            padding: 0.6rem 2rem;
+            border: 1px solid #333333;
+            border-radius: 8px;
+            transition: border-color 0.2s;
+        }
+
+        .result-banner a:hover {
+            border-color: #ff69b4;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ByteMe Arena</h1>
+        <span id="room-id-display" class="room-id-label"></span>
+    </header>
+
+    <main>
+        <div id="game-status" class="game-status">Connecting...</div>
+        
+        <div id="player-info" class="player-info-container"></div>
+        
+        <div id="game-board" class="tictactoe-board"></div>
+        
+        <div id="error-message" class="error-message"></div>
+        
+        <div id="result-banner" class="result-banner">
+            <h2 id="result-title"></h2>
+            <p id="result-subtitle"></p>
+            <a href="/lobby">Back to Lobby</a>
+        </div>
+    </main>
+
+    <script>
+        // Get room ID from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const roomId = urlParams.get('room_id');
+        
+        if (!roomId) {
+            window.location.href = '/lobby';
+        }
+        
+        document.getElementById('room-id-display').textContent = `Room: ${roomId}`;
+
+        // Game State Variables
+        let currentUserUid = null;
+        let websocket = null;
+        let isGameActive = false;
+        
+        const gameStatus = document.getElementById('game-status');
+        const gameBoard = document.getElementById('game-board');
+        const playerInfoDisplay = document.getElementById('player-info');
+        const errorMessage = document.getElementById('error-message');
+        const resultBanner = document.getElementById('result-banner');
+
+        function createBoard() {
+            gameBoard.innerHTML = '';
+            
+            for (let index = 0; index < 9; index++) {
+                const cell = document.createElement('div');
+                cell.className = 'tictactoe-cell';
+                cell.id = `cell-${index}`;
+                
+                cell.addEventListener('click', () => {
+                    if (isGameActive && websocket) {
+                        errorMessage.textContent = '';
+                        websocket.send(JSON.stringify({ 
+                            type: 'move', 
+                            cell: index 
+                        }));
+                    }
+                });
+                
+                gameBoard.appendChild(cell);
+            }
+        }
+
+        function updateBoardDisplay(boardData, currentTurnUid) {
+            for (let index = 0; index < 9; index++) {
+                const cell = document.getElementById(`cell-${index}`);
+                const cellMarker = boardData[index];
+                
+                if (cellMarker) {
+                    cell.innerHTML = `<span class="${cellMarker}">${cellMarker}</span>`;
+                    cell.className = 'tictactoe-cell taken disabled';
+                } else {
+                    cell.innerHTML = '';
+                    cell.className = 'tictactoe-cell';
+                    if (!isGameActive || currentTurnUid !== currentUserUid) {
+                        cell.classList.add('disabled');
+                    }
+                }
+            }
+        }
+
+        function updatePlayerTags(playersList, playerMarkers, currentTurnUid) {
+            if (!playersList || !playerMarkers) return;
+            
+            playerInfoDisplay.innerHTML = '';
+            
+            playersList.forEach(playerUid => {
+                const marker = playerMarkers[playerUid];
+                const isActiveTurn = (playerUid === currentTurnUid);
+                const isMe = (playerUid === currentUserUid);
+                
+                const playerWrapper = document.createElement('div');
+                playerWrapper.className = `player-tag ${isActiveTurn ? 'active-turn' : ''}`;
+                
+                playerWrapper.innerHTML = `
+                    <span class="marker ${marker}">${marker}</span>
+                    <span class="label">${isMe ? 'You' : 'Opponent'}</span>
+                `;
+                
+                playerInfoDisplay.appendChild(playerWrapper);
+            });
+        }
+
+        function showResult(title, subtitle) {
+            isGameActive = false;
+            gameStatus.textContent = '';
+            gameStatus.className = 'game-status';
+            
+            document.getElementById('result-title').textContent = title;
+            document.getElementById('result-subtitle').textContent = subtitle;
+            resultBanner.style.display = 'flex';
+            
+            // Disable all cells
+            gameBoard.querySelectorAll('.tictactoe-cell').forEach(cell => {
+                cell.classList.add('disabled');
+            });
+        }
+
+        async function initializeGame() {
+            try {
+                // Wait for auth to resolve
+                const response = await fetch('/auth/me', { credentials: 'include' });
+                const userData = await response.json();
+                
+                if (!userData.uid) {
+                    return window.location.href = '/';
+                }
+                
+                currentUserUid = userData.uid;
+                createBoard();
+                
+                // Connect WebSocket
+                const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                websocket = new WebSocket(`${protocol}//${window.location.host}/game/ws/${roomId}?uid=${currentUserUid}`);
+                
+                websocket.onopen = () => {
+                    gameStatus.textContent = 'Waiting for opponent...';
+                };
+                
+                websocket.onclose = () => {
+                    if (isGameActive) {
+                        showResult('Disconnected', 'Connection to server lost.');
+                    }
+                };
+                
+                websocket.onmessage = (event) => {
+                    const message = JSON.parse(event.data);
+                    
+                    if (message.type === 'waiting') {
+                        gameStatus.textContent = message.message;
+                        
+                    } else if (message.type === 'game_state') {
+                        if (message.your_uid) {
+                            currentUserUid = message.your_uid;
+                        }
+                        
+                        if (message.status === 'ongoing' || !message.status) {
+                            isGameActive = true;
+                            
+                            const isMyTurn = (message.turn === currentUserUid);
+                            gameStatus.textContent = isMyTurn ? 'Your turn' : 'Waiting for opponent';
+                            gameStatus.className = `game-status ${isMyTurn ? 'my-turn' : ''}`;
+                            
+                            updateBoardDisplay(message.board, message.turn);
+                            updatePlayerTags(message.players, message.markers, message.turn);
+                            
+                        } else if (message.status === 'win') {
+                            updateBoardDisplay(message.board, message.turn);
+                            const didIWin = (message.winner === currentUserUid);
+                            showResult(
+                                didIWin ? 'You Win' : 'You Lose', 
+                                'Elo rating has been updated.'
+                            );
+                            
+                        } else if (message.status === 'draw') {
+                            updateBoardDisplay(message.board, message.turn);
+                            showResult("It's a Draw", 'Elo rating has been adjusted.');
+                        }
+                        
+                    } else if (message.type === 'game_over') {
+                        const didIWin = (message.winner === currentUserUid);
+                        showResult(
+                            didIWin ? 'Opponent Disconnected — You Win' : 'You Forfeited', 
+                            'Elo rating updated.'
+                        );
+                        
+                    } else if (message.type === 'error') {
+                        errorMessage.textContent = message.message;
+                    }
+                };
+            } catch (error) {
+                errorMessage.textContent = 'Failed to load game environment.';
+            }
+        }
+
+        // Start
+        initializeGame();
+    </script>
+</body>
+</html>

@@ -1,0 +1,248 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>ByteMe Arena — Lobby</title>
+    <link rel="stylesheet" href="/static/style.css">
+    <style>
+        /* Lobby Specific Styles */
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+        }
+
+        .user-info {
+            color: #888888;
+            font-size: 0.85rem;
+        }
+
+        .section-header {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #888888;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            display: flex;
+            align-items: center;
+            width: 100%;
+        }
+
+        .status-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #333333;
+            margin-right: 10px;
+        }
+
+        .status-dot.connected {
+            background-color: #ff69b4;
+            box-shadow: 0 0 8px #ff69b488;
+        }
+
+        .user-name {
+            font-weight: 600;
+            font-size: 1rem;
+        }
+        
+        .user-id {
+            font-size: 0.75rem;
+            color: #555555;
+            margin-top: 0.4rem;
+            word-break: break-all;
+        }
+
+        /* Challenge Popup Modal overlaying content */
+        .challenge-popup {
+            position: fixed;
+            top: 2rem;
+            right: 2rem;
+            background-color: #111111;
+            border: 1px solid #ff69b466;
+            border-radius: 10px;
+            padding: 1.5rem;
+            min-width: 280px;
+            display: none;
+            z-index: 100;
+            box-shadow: 0 0 20px #ff69b422;
+        }
+
+        .challenge-popup p {
+            font-size: 1rem;
+            color: #cccccc;
+            margin-bottom: 1.2rem;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 0.8rem;
+        }
+
+        .button-group button {
+            flex: 1;
+            padding: 0.6rem;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ByteMe Arena</h1>
+        <div class="header-actions">
+            <span id="user-info" class="user-info">Loading...</span>
+            <a href="/leaderboard-page">Leaderboard</a>
+            <button id="logout-button" class="secondary">Logout</button>
+        </div>
+    </header>
+
+    <main>
+        <div class="section-header">
+            <span class="status-dot" id="connection-status-dot"></span>
+            Online Players — Click to Challenge
+        </div>
+        
+        <div id="user-grid" class="user-grid">
+            <p id="empty-message">Connecting to lobby...</p>
+        </div>
+        
+        <div id="status-message" class="message"></div>
+    </main>
+
+    <div id="challenge-popup" class="challenge-popup">
+        <p id="challenge-text"></p>
+        <div class="button-group">
+            <button id="accept-button">Accept</button>
+            <button id="decline-button" class="secondary">Decline</button>
+        </div>
+    </div>
+
+    <script>
+        let currentUserUid = null;
+        let currentUserName = null;
+        let websocket = null;
+        let pendingChallengerUid = null;
+
+        const userGrid = document.getElementById('user-grid');
+        const statusMessage = document.getElementById('status-message');
+        const challengePopup = document.getElementById('challenge-popup');
+
+        async function initializeLobby() {
+            try {
+                const response = await fetch('/auth/me', { credentials: 'include' });
+                const userData = await response.json();
+                
+                if (!userData.uid) {
+                    window.location.href = '/';
+                    return;
+                }
+                
+                currentUserUid = userData.uid;
+                currentUserName = userData.name;
+                
+                document.getElementById('user-info').textContent = `${currentUserName} (${currentUserUid})`;
+                connectWebSocket();
+            } catch (error) {
+                console.error("Auth check failed", error);
+            }
+        }
+
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            websocket = new WebSocket(`${protocol}//${window.location.host}/ws/lobby?uid=${currentUserUid}`);
+            
+            websocket.onopen = () => {
+                document.getElementById('connection-status-dot').classList.add('connected');
+                statusMessage.textContent = 'Connected to lobby.';
+            };
+            
+            websocket.onclose = () => {
+                document.getElementById('connection-status-dot').classList.remove('connected');
+                statusMessage.textContent = 'Disconnected from lobby.';
+            };
+            
+            websocket.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                
+                if (message.type === 'user_list') {
+                    renderUserGrid(message.users);
+                } else if (message.type === 'challenge_incoming') {
+                    pendingChallengerUid = message.challenger_uid;
+                    document.getElementById('challenge-text').textContent = `${message.challenger_name} is challenging you!`;
+                    challengePopup.style.display = 'block';
+                } else if (message.type === 'challenge_declined') {
+                    statusMessage.textContent = `Player ${message.target_uid} declined your challenge.`;
+                } else if (message.type === 'match_start') {
+                    window.location.href = `/game?room_id=${encodeURIComponent(message.room_id)}`;
+                } else if (message.type === 'error') {
+                    statusMessage.textContent = `Error: ${message.message}`;
+                }
+            };
+        }
+
+        function renderUserGrid(users) {
+            userGrid.innerHTML = '';
+            
+            const otherUsers = users.filter(user => user.uid !== currentUserUid);
+            
+            if (otherUsers.length === 0) {
+                userGrid.innerHTML = '<p id="empty-message">No other players currently online.</p>';
+                return;
+            }
+            
+            otherUsers.forEach(user => {
+                const card = document.createElement('div');
+                card.className = 'user-card';
+                
+                const initials = (user.name || user.uid).charAt(0).toUpperCase();
+                
+                card.innerHTML = `
+                    <span class="initial">${initials}</span>
+                    <div class="user-name">${user.name}</div>
+                    <div class="user-id">${user.uid}</div>
+                `;
+                
+                card.addEventListener('click', () => {
+                    statusMessage.textContent = `Sending challenge out to ${user.name}...`;
+                    websocket.send(JSON.stringify({
+                        type: 'challenge',
+                        target_uid: user.uid
+                    }));
+                });
+                
+                userGrid.appendChild(card);
+            });
+        }
+
+        // --- Event Listeners ---
+        document.getElementById('accept-button').addEventListener('click', () => {
+            websocket.send(JSON.stringify({
+                type: 'challenge_response',
+                challenger_uid: pendingChallengerUid,
+                accepted: true
+            }));
+            challengePopup.style.display = 'none';
+            statusMessage.textContent = 'Matching...';
+        });
+
+        document.getElementById('decline-button').addEventListener('click', () => {
+            websocket.send(JSON.stringify({
+                type: 'challenge_response',
+                challenger_uid: pendingChallengerUid,
+                accepted: false
+            }));
+            challengePopup.style.display = 'none';
+            pendingChallengerUid = null;
+        });
+
+        document.getElementById('logout-button').addEventListener('click', async () => {
+            await fetch('/auth/logout', { method: 'POST', credentials: 'include' });
+            window.location.href = '/';
+        });
+
+        // Start
+        initializeLobby();
+    </script>
+</body>
+</html>

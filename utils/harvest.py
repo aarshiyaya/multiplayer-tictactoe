@@ -1,1 +1,0 @@
-print("bachna e haseeno.")

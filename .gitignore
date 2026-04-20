@@ -1,2 +1,18 @@
+# Python
 __pycache__/
 *.pyc
+.venv/
+
+# OS
+.DS_Store
+
+# Lock file
+uv.lock
+
+# PDFs
+*.pdf
+
+# IDE
+.vscode/
+.idea/
+.gemini/

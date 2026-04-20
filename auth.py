@@ -1,146 +1,73 @@
-from fastapi import FastAPI, HTTPException, Request, Depends
+from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
-from fastapi.middleware.cors import CORSMiddleware
-from starlette.middleware.sessions import SessionMiddleware
-from pydantic import BaseModel
-import mysql.connector
-from pymongo import MongoClient
-import base64
-import os
-from db import get_mongo
+from db import get_mysql
+from utils.facial_recognition_module import find_closest_match
 
-# ── import the provided black-box module (must be in the same directory) ──────
-from facial_recognition_module import find_closest_match
-
-app = FastAPI()
-
-# ── middleware ─────────────────────────────────────────────────────────────────
-app.add_middleware(
-    SessionMiddleware,
-    secret_key=os.environ.get("SESSION_SECRET", "change-this-in-production"),
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],          # tighten this in production
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ── DB connection helpers (swap in your Phase 1 credentials) ───────────────────
-def get_mysql():
-    return mysql.connector.connect(
-        host="localhost",
-        port=3307,
-        user="root",
-        password="rootpassword",
-        database="byteme_test",
-    )
-# ── request schema ─────────────────────────────────────────────────────────────
-class LoginRequest(BaseModel):
-    image: str   # base64-encoded webcam frame sent from login.html
+router = APIRouter()
 
 
-# ── POST /auth/login ───────────────────────────────────────────────────────────
-@app.post("/auth/login")
-async def login(payload: LoginRequest, request: Request):
-    """
-    1. Pull all profile images from MongoDB  →  {uid: image_data}
-    2. Call find_closest_match with the webcam frame
-    3. On a match: verify uid in MySQL, set is_online=TRUE, create session
-    4. Return success/failure JSON
-    """
-
-    # ── step 1: load stored profile images from MongoDB ────────────────────────
+@router.post("/login")
+async def login(request: Request):
     try:
-        mongo_collection = get_mongo()  # returns arena.images from db.py
-        all_docs = mongo_collection.find({}, {"uid": 1, "image": 1, "_id": 0})
-        db_images: dict[str, str] = {
-            doc["uid"]: doc["image"]
-            for doc in all_docs
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MongoDB error: {e}")
+        body = await request.json()
+        image_b64 = body.get("image")
 
-    if not db_images:
-        raise HTTPException(status_code=503, detail="No profiles found in database. Run Phase 1 scraper first.")
+        if not image_b64:
+            return {"success": False, "error": "No image provided"}
 
-    # ── step 2: run facial recognition ────────────────────────────────────────
-    try:
-        matched_uid = find_closest_match(
-            login_image_data=payload.image,   # base64 string from webcam
-            db_images_dict=db_images,         # {uid: base64/bytes from Mongo}
-        )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Facial recognition error: {e}")
+        #using the prebuilt cache
+        encodings_cache = request.app.state.encodings_cache
+        matched_uid = find_closest_match(image_b64, encodings_cache)
 
-    if matched_uid is None:
-        # no face matched within the 0.7 confidence threshold
-        raise HTTPException(status_code=401, detail="Face not recognised. Please try again.")
+        if not matched_uid:
+            return {"success": False, "error": "No match found"}
 
-    # ── step 3: cross-reference uid in MySQL ──────────────────────────────────
-    try:
+        # Look up user
         conn = get_mysql()
-        cursor = conn.cursor(dictionary=True)
-        cursor.execute("SELECT uid, name, elo_rating FROM users WHERE uid = %s", (matched_uid,))
-        user = cursor.fetchone()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"MySQL error: {e}")
-    finally:
-        cursor.close()
-        conn.close()
+        cur = conn.cursor()
+        cur.execute("SELECT uid, name FROM users WHERE uid = %s", (matched_uid,))
+        row = cur.fetchone()
 
-    if not user:
-        # face recognised but uid not in MySQL (shouldn't normally happen)
-        raise HTTPException(status_code=404, detail="Matched user not found in records.")
+        if not row:
+            cur.close()
+            conn.close()
+            return {"success": False, "error": "User not found"}
 
-    # ── step 4: mark user as online + create session ──────────────────────────
-    try:
-        conn = get_mysql()
-        cursor = conn.cursor()
-        cursor.execute("UPDATE users SET is_online = TRUE WHERE uid = %s", (matched_uid,))
+        uid, name = row
+        cur.execute("UPDATE users SET is_online = TRUE WHERE uid = %s", (uid,))
         conn.commit()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Could not update online status: {e}")
-    finally:
-        cursor.close()
+        cur.close()
         conn.close()
 
-    request.session["uid"] = user["uid"]
-    request.session["name"] = user["name"]
+        # Save
+        request.session["uid"] = uid
+        request.session["name"] = name
 
-    return JSONResponse({
-        "success": True,
-        "uid": user["uid"],
-        "name": user["name"],
-        "elo_rating": user["elo_rating"],
-    })
+        return {"success": True, "uid": uid, "name": name}
+
+    except Exception as e:
+        return {"success": False, "error": str(e)}
 
 
-# ── POST /auth/logout ─────────────────────────────────────────────────────────
-@app.post("/auth/logout")
+@router.post("/logout")
 async def logout(request: Request):
     uid = request.session.get("uid")
     if uid:
-        try:
-            conn = get_mysql()
-            cursor = conn.cursor()
-            cursor.execute("UPDATE users SET is_online = FALSE WHERE uid = %s", (uid,))
-            conn.commit()
-        except Exception:
-            pass
-        finally:
-            cursor.close()
-            conn.close()
-        request.session.clear()
-    return JSONResponse({"success": True})
+        conn = get_mysql()
+        cur = conn.cursor()
+        cur.execute("UPDATE users SET is_online = FALSE WHERE uid = %s", (uid,))
+        conn.commit()
+        cur.close()
+        conn.close()
+
+    request.session.clear()
+    return {"success": True}
 
 
-# ── GET /auth/me — handy helper for the frontend to check session state ────────
-@app.get("/auth/me")
+@router.get("/me")
 async def me(request: Request):
     uid = request.session.get("uid")
+    name = request.session.get("name")
     if not uid:
-        raise HTTPException(status_code=401, detail="Not logged in")
-    return JSONResponse({"uid": uid, "name": request.session.get("name")})
+        return {"error": "Not authenticated"}
+    return {"uid": uid, "name": name}

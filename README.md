@@ -1,51 +1,80 @@
-[![Review Assignment Due Date](https://classroom.github.com/assets/deadline-readme-button-22041afd0340ce965d47ae6ef1cefeee28c7c493a6346c4f15d667ab976d596c.svg)](https://classroom.github.com/a/rd3t__9M)
-# Introduction to Software Systems S26 
-## Course Project: Identity-Verified Multiplayer Arena
-
-The assignment is available [here](https://cs6201.github.io/s26/assets/Project.pdf).
-
-[This](https://hackmd.io/@iss-spring-2026/S1WBWzzoWe) is where you can ask questions about it, for which you will receive answers [here](https://hackmd.io/@iss-spring-2026/ryZ_WGzibx).
-
-Good luck, have fun!  
-
 # ByteMe Arena
 
-A real-time multiplayer Tic-Tac-Toe platform with facial recognition login and Elo-based matchmaking.
+A real-time multiplayer Tic-Tac-Toe platform with facial recognition authentication and Elo-based matchmaking.
 
-**Stack:** FastAPI, WebSockets, MySQL, MongoDB, face_recognition
+![FastAPI](https://img.shields.io/badge/FastAPI-005571?style=for-the-badge&logo=fastapi&logoColor=white)
+![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
+![WebSocket](https://img.shields.io/badge/WebSockets-010101?style=for-the-badge&logo=socketdotio&logoColor=white)
+![MySQL](https://img.shields.io/badge/MySQL-4479A1?style=for-the-badge&logo=mysql&logoColor=white)
+![MongoDB](https://img.shields.io/badge/MongoDB-47A248?style=for-the-badge&logo=mongodb&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?style=for-the-badge&logo=docker&logoColor=white)
+
+---
+
+## Overview
+
+ByteMe Arena is a full-stack multiplayer gaming platform where users log in via facial recognition instead of passwords. Once authenticated, players are matched against opponents of similar skill using an Elo rating system. Matches are played in real time over WebSockets, with all game logic validated server-side to prevent client manipulation.
+
+---
+
+## Features
+
+- **Facial recognition login** — no passwords; authentication uses live face matching against stored profile images
+- **Real-time gameplay** — moves and game state synced over persistent WebSocket connections
+- **Elo-based matchmaking** — players are ranked and matched by skill rating, updated after every match
+- **Live online status** — see which players are currently active
+- **Server-side validation** — all move legality and win detection handled on the backend
+- **Dual-database architecture** — relational data in MySQL, image data in MongoDB
+
+---
+
+## Architecture
+
+```
+Client (Browser)
+      |
+      | HTTP (auth, matchmaking)
+      | WebSocket (live gameplay, presence)
+      v
+FastAPI Server (main.py)
+      |
+      |-- MySQL (users, match history, Elo ratings)
+      |-- MongoDB (base64 face images, keyed by UID)
+      |-- face_recognition (login verification)
+```
+
+User records and match history live in MySQL. Face images are stored in MongoDB, linked to users by UID. On login, the submitted image is compared against the stored encoding — no session tokens, no passwords.
 
 ---
 
 ## Database Schemas
 
-### MySQL — `byteme` database
+### MySQL — `byteme`
 
 ```sql
--- Users table (created by scraper.py)
 CREATE TABLE IF NOT EXISTS users (
-    uid VARCHAR(50) PRIMARY KEY,
-    name VARCHAR(100),
-    elo_rating INT DEFAULT 1200,
-    is_online BOOLEAN DEFAULT FALSE
+    uid          VARCHAR(50)  PRIMARY KEY,
+    name         VARCHAR(100),
+    elo_rating   INT          DEFAULT 1200,
+    is_online    BOOLEAN      DEFAULT FALSE
 );
 
--- Matches table (created automatically on server startup)
 CREATE TABLE IF NOT EXISTS matches (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    player1_uid VARCHAR(255),
-    player2_uid VARCHAR(255),
-    winner_uid VARCHAR(255),
-    result ENUM('win', 'draw', 'forfeit'),
-    played_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    id           INT AUTO_INCREMENT PRIMARY KEY,
+    player1_uid  VARCHAR(255),
+    player2_uid  VARCHAR(255),
+    winner_uid   VARCHAR(255),
+    result       ENUM('win', 'draw', 'forfeit'),
+    played_at    TIMESTAMP    DEFAULT CURRENT_TIMESTAMP
 );
 ```
 
-### MongoDB — `arena` database, `images` collection
+### MongoDB — `arena.images`
 
 ```json
 {
-    "uid": "string — matches MySQL users.uid",
-    "image": "string — base64-encoded profile photo"
+  "uid":   "string — matches MySQL users.uid",
+  "image": "string — base64-encoded profile photo"
 }
 ```
 
@@ -53,23 +82,23 @@ CREATE TABLE IF NOT EXISTS matches (
 
 ## Setup & Run
 
+**Prerequisites:** Docker, Python 3.11+, [uv](https://github.com/astral-sh/uv)
+
 ### 1. Start databases
 
 ```bash
 docker compose up -d
 ```
 
-This starts:
-- **MySQL** on port `3308` (root password: `rootpassword`, database: `byteme`)
-- **MongoDB** on port `27019` (user: `admin`, password: `password123`)
+Starts MySQL on port `3308` and MongoDB on port `27019`.
 
-### 2. Install dependencies and run
+### 2. Install dependencies
 
 ```bash
 uv sync
 ```
 
-This reads `pyproject.toml`, creates the `.venv`, and installs all dependencies in one command.
+Reads `pyproject.toml`, creates `.venv`, and installs all packages.
 
 ### 3. Populate the database
 
@@ -77,7 +106,7 @@ This reads `pyproject.toml`, creates the `.venv`, and installs all dependencies 
 uv run python scraper.py
 ```
 
-This scrapes profile images from the batch data CSV, stores user records in MySQL and face images in MongoDB.
+Scrapes profile images from the batch data CSV, writes user records to MySQL, and stores face images in MongoDB.
 
 ### 4. Start the server
 
@@ -85,6 +114,27 @@ This scrapes profile images from the batch data CSV, stores user records in MySQ
 uv run uvicorn main:app --reload
 ```
 
-The app runs at `http://localhost:8000`.
+Server runs at `http://localhost:8000`.
 
 ---
+
+## Project Structure
+
+```
+.
+├── main.py          # FastAPI app, WebSocket handlers, game logic
+├── scraper.py       # Database seeding from CSV
+├── docker-compose.yml
+├── pyproject.toml
+└── README.md
+```
+
+---
+
+## Design Decisions
+
+**Why two databases?** User records and match history are relational and benefit from SQL queries and joins. Face images are binary blobs with no relational structure — MongoDB handles those more naturally and keeps MySQL clean.
+
+**Why server-side game validation?** Trusting the client for move legality opens the door to cheating. All validation runs on the server; the client only sends intended moves and renders state it receives back.
+
+**Why Elo?** Elo is simple, well-understood, and self-correcting over time. New users start at 1200 and ratings converge to reflect actual skill after enough matches.

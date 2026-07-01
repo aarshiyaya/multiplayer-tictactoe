@@ -130,11 +130,3 @@ Server runs at `http://localhost:8000`.
 ```
 
 ---
-
-## Design Decisions
-
-**Why two databases?** User records and match history are relational and benefit from SQL queries and joins. Face images are binary blobs with no relational structure — MongoDB handles those more naturally and keeps MySQL clean.
-
-**Why server-side game validation?** Trusting the client for move legality opens the door to cheating. All validation runs on the server; the client only sends intended moves and renders state it receives back.
-
-**Why Elo?** Elo is simple, well-understood, and self-correcting over time. New users start at 1200 and ratings converge to reflect actual skill after enough matches.
